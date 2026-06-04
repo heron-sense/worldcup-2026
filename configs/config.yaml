@@ -11,6 +11,17 @@ redis:
   password: ""       # 无密码留空即可
   db: 0              # 使用的数据库编号（0-15）
 
+# PostgreSQL 配置（世界杯 scene / auth 接口）
+postgres:
+  host: "127.0.0.1"
+  port: 8964
+  user: "chogori"
+  password: "Chogori@2035"
+  dbname: "chogori"
+  sslmode: "disable"
+  max_idle_conns: 10
+  max_open_conns: 100
+
 # MySQL 配置
 mysql:
   host: "127.0.0.1"

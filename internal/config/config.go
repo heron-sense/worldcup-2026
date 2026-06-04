@@ -20,11 +20,12 @@ import (
 // Config 顶层配置结构，与 config.yaml 一一对应
 // 每个子结构体对应 YAML 中的一个顶级键
 type Config struct {
-	Server ServerConfig `mapstructure:"server"` // 服务器配置
-	Redis  RedisConfig  `mapstructure:"redis"`  // Redis 配置
-	MySQL  MySQLConfig  `mapstructure:"mysql"`  // MySQL 配置
-	Wechat WechatConfig `mapstructure:"wechat"` // 微信配置
-	Log    LogConfig    `mapstructure:"log"`     // 日志配置
+	Server   ServerConfig   `mapstructure:"server"`   // 服务器配置
+	Redis    RedisConfig    `mapstructure:"redis"`    // Redis 配置
+	MySQL    MySQLConfig    `mapstructure:"mysql"`    // MySQL 配置
+	Postgres PostgresConfig `mapstructure:"postgres"` // PostgreSQL 配置（世界杯场景）
+	Wechat   WechatConfig   `mapstructure:"wechat"`   // 微信配置
+	Log      LogConfig      `mapstructure:"log"`      // 日志配置
 }
 
 // ServerConfig 服务器基础配置
@@ -68,6 +69,30 @@ type MySQLConfig struct {
 func (m *MySQLConfig) DSN() string {
 	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 		m.User, m.Password, m.Host, m.Port, m.DBName)
+}
+
+// PostgresConfig PostgreSQL 连接配置
+type PostgresConfig struct {
+	Host         string `mapstructure:"host"`
+	Port         int    `mapstructure:"port"`
+	User         string `mapstructure:"user"`
+	Password     string `mapstructure:"password"`
+	DBName       string `mapstructure:"dbname"`
+	SSLMode      string `mapstructure:"sslmode"`
+	MaxIdleConns int    `mapstructure:"max_idle_conns"`
+	MaxOpenConns int    `mapstructure:"max_open_conns"`
+}
+
+// DSN 返回 PostgreSQL 连接串
+func (p *PostgresConfig) DSN() string {
+	sslMode := p.SSLMode
+	if sslMode == "" {
+		sslMode = "disable"
+	}
+	return fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		p.Host, p.Port, p.User, p.Password, p.DBName, sslMode,
+	)
 }
 
 // WechatConfig 微信小游戏配置

@@ -29,6 +29,7 @@ import (
 	"syscall"
 	"time"
 
+	"game-server/internal/auth"
 	"game-server/internal/combat"
 	"game-server/internal/config"
 	"game-server/internal/gateway"
@@ -39,6 +40,7 @@ import (
 	"game-server/internal/payment"
 	"game-server/internal/protocol"
 	"game-server/internal/rank"
+	"game-server/internal/scene"
 	"game-server/internal/store"
 	"game-server/pkg/logger"
 
@@ -82,12 +84,24 @@ func main() {
 		}
 	}()
 
-	// Redis：会话缓存、排行榜、限流
+	// Redis：会话缓存、排行榜、限流、auth_credential
 	redisStore, err := store.NewRedisStore(&cfg.Redis)
 	if err != nil {
 		zap.L().Warn("Redis 初始化失败，将降级运行", zap.Error(err))
 		// Redis 连接失败不退出，部分功能降级运行
 	}
+
+	// PostgreSQL：世界杯场景档案
+	var pgStore *store.PostgresStore
+	pgStore, err = store.NewPostgresStore(&cfg.Postgres)
+	if err != nil {
+		zap.L().Warn("PostgreSQL 初始化失败，auth/scene 接口不可用", zap.Error(err))
+	}
+	defer func() {
+		if pgStore != nil {
+			pgStore.Close()
+		}
+	}()
 
 	// ========== 4. 初始化业务模块 ==========
 	// 微信 API 客户端
@@ -154,6 +168,17 @@ func main() {
 	//   - 微信支付回调是 HTTP POST 请求，不是 WebSocket
 	//   - 与游戏 WebSocket 服务解耦，互不影响
 	callbackMux := http.NewServeMux()
+
+	// design/auth.md、design/scene.md 定义的 HTTP 接口
+	if redisStore != nil && pgStore != nil {
+		authHandler := auth.NewHandler(redisStore)
+		sceneHandler := scene.NewHandler(pgStore, redisStore)
+		callbackMux.Handle("/auth", authHandler)
+		callbackMux.HandleFunc("/scene/detail", sceneHandler.HandleDetail)
+		callbackMux.HandleFunc("/scene/slot/reveal", sceneHandler.HandleReveal)
+		zap.L().Info("已注册 auth/scene HTTP 接口")
+	}
+
 	callbackMux.HandleFunc("/pay/callback", func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -206,8 +231,6 @@ func main() {
 		zap.L().Error("回调服务器关闭失败", zap.Error(err))
 	}
 
-	// 7.2 关闭所有 WebSocket 连接
-	server.Shutdown()
 
 	// 7.3 关闭数据存储
 	if redisStore != nil {

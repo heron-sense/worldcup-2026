@@ -58,6 +58,8 @@ func (s *RedisStore) Close() error {
 // sessionKeyPrefix 会话缓存的 key 前缀
 // 使用前缀命名空间，避免不同业务的数据冲突
 const sessionKeyPrefix = "session:"
+const authCredKeyPrefix = "auth_cred:"
+const authCredTTL = 24 * time.Hour
 
 // SessionData 会话缓存数据
 // 存储在 Redis 中的玩家会话信息，避免每次请求都查 MySQL
@@ -107,6 +109,28 @@ func (s *RedisStore) GetSession(uid int64) (*SessionData, error) {
 func (s *RedisStore) DelSession(uid int64) error {
 	key := fmt.Sprintf("%s%d", sessionKeyPrefix, uid)
 	return s.client.Del(s.ctx, key).Err()
+}
+
+// SetAuthCredential 保存 auth 接口颁发的凭证 -> open_id
+func (s *RedisStore) SetAuthCredential(credential, openID string) error {
+	key := authCredKeyPrefix + credential
+	if err := s.client.Set(s.ctx, key, openID, authCredTTL).Err(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// GetAuthOpenID 根据 auth_credential 解析 open_id
+func (s *RedisStore) GetAuthOpenID(credential string) (string, error) {
+	key := authCredKeyPrefix + credential
+	openID, err := s.client.Get(s.ctx, key).Result()
+	if err == redis.Nil {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return openID, nil
 }
 
 // ========== 排行榜操作 ==========
